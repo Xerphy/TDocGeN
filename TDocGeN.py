@@ -18,7 +18,7 @@ def normalize_text(value):
     return str(value).strip()
 
 
-def list_to_multiline(value: list[str]) -> str:
+def list_to_multiline(value: List[str]) -> str:
     """
     convierte listas en texto multilinea
     """
@@ -54,17 +54,12 @@ class Practica:
 
     marco_teorico: str = ""
 
-    desarrollo: str = ""
-
     cuestionario: List[str] = field(default_factory=list)
-
-    conclusiones: str = ""
 
     aplicaciones: List[str] = field(default_factory=list)
 
     referencias: List[str] = field(default_factory=list)
 
-    criterios: str = ""
 
     @classmethod
     def quick(cls, numero, nombre):
@@ -105,16 +100,8 @@ class Practica:
                 self.marco_teorico
             ),
 
-            "desarrollo": normalize_text(
-                self.desarrollo
-            ),
-
             "cuestionario": list_to_multiline(
                 self.cuestionario
-            ),
-
-            "conclusiones": normalize_text(
-                self.conclusiones
             ),
 
             "aplicaciones": list_to_multiline(
@@ -123,10 +110,6 @@ class Practica:
 
             "referencias": list_to_multiline(
                 self.referencias
-            ),
-
-            "criterios": normalize_text(
-                self.criterios
             ),
         }
 
@@ -174,7 +157,17 @@ class Manual:
 
         context = self.to_docx_context()
 
-        for key, value in context.items():
+        required = [
+            "division",
+            "asignatura",
+            "elaboro",
+            "emision",
+            "edicion",
+            "vigencia",
+        ]
+
+        for key in required:
+            value = context.get(key)
 
             if value in ("", [], None):
                 missing.append(key)
