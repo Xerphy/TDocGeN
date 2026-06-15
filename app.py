@@ -4,7 +4,12 @@ Streamlit app · Step-based workflow
 """
 
 import json
+import os
+import re
+import tempfile
 import traceback
+import hashlib
+from datetime import datetime
 import streamlit as st
 
 # ─────────────────────────────────────────────────────────────
@@ -13,7 +18,7 @@ import streamlit as st
 
 st.set_page_config(
     page_title="TDocGeN",
-    page_icon="📄",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -105,12 +110,12 @@ html, body, .stApp {
 
 /* ── Section title ── */
 .section-title {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 700;
     letter-spacing: .12em;
     text-transform: uppercase;
     color: #4F8EF7;
-    margin-bottom: .4rem;
+    margin-bottom: .5rem;
 }
 
 /* ── Card ── */
@@ -190,30 +195,53 @@ html, body, .stApp {
     background: #0D1117 !important;
     border: 1px solid #30363D !important;
     border-radius: 8px !important;
-    color: #E6EDF3 !important;
+    color: #F8FAFC !important;
+}
+.stTextInput > div > div > input::placeholder,
+.stTextArea textarea::placeholder {
+    color: #A5B3C6 !important;
+    opacity: 1 !important;
+}
+.stTextInput label,
+.stTextArea label,
+.stSelectbox label,
+.stNumberInput label {
+    color: #F8FAFC !important;
 }
 .stTextInput > div > div > input:focus,
-.stTextArea textarea:focus {
+.stTextArea textarea:focus,
+.stSelectbox > div > div:focus {
     border-color: #4F8EF7 !important;
     box-shadow: 0 0 0 3px #4F8EF715 !important;
 }
 
-/* ── Buttons ── */
+/* ── Buttons FIX (dark theme safe) ── */
 .stButton > button {
     border-radius: 8px !important;
     font-weight: 500 !important;
     font-size: 13px !important;
     transition: all .15s !important;
+
+    background-color: #21262D !important;
+    color: #E6EDF3 !important;
+    border: 1px solid #30363D !important;
 }
-.stButton > button[kind="primary"] {
-    background: #4F8EF7 !important;
-    border: none !important;
-    color: #fff !important;
-}
-.stButton > button[kind="primary"]:hover {
-    background: #3D7DE0 !important;
+
+/* hover */
+.stButton > button:hover {
+    background-color: #30363D !important;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px #4F8EF744 !important;
+}
+
+/* primary buttons (Streamlit real selector) */
+.stButton > button[data-baseweb="button"] {
+    color: #E6EDF3 !important;
+}
+
+/* override primary via aria */
+.stButton > button[aria-pressed="true"] {
+    background: #4F8EF7 !important;
+    color: #ffffff !important;
 }
 
 /* Divider */
@@ -224,25 +252,121 @@ hr {
 }
 
 /* ── expander ── */
-.streamlit-expanderHeader {
+.streamlit-expanderHeader,
+.stExpanderHeader,
+.stExpander > div,
+div[class*="stExpander"] > button,
+div[class*="stExpander"] > button span,
+div[class*="stExpander"] > button div,
+.stExpanderHeader button,
+.stExpanderHeader button span,
+.stExpanderHeader span,
+.streamlit-expanderHeader * {
+    color: #E6EDF3 !important;
+}
+
+.streamlit-expanderHeader,
+.stExpanderHeader,
+.stExpander > div,
+div[class*="stExpander"] > button,
+div[class*="stExpander"] > button span,
+div[class*="stExpander"] > button div,
+.stExpanderHeader button,
+.stExpanderHeader button span,
+.stExpanderHeader span {
     background: #161B22 !important;
     border: 1px solid #30363D !important;
     border-radius: 8px !important;
+}
+
+div[class*="stExpander"] > button,
+.stExpanderHeader button,
+.streamlit-expanderHeader button {
+    background: #161B22 !important;
     color: #E6EDF3 !important;
+}
+
+div[class*="stExpander"] > button:hover,
+.stExpanderHeader button:hover,
+.streamlit-expanderHeader button:hover {
+    background: #131720 !important;
+    color: #E6EDF3 !important;
+}
+
+div[class*="stExpander"] > button span,
+.stExpanderHeader button span,
+.streamlit-expanderHeader button span {
+    color: #E6EDF3 !important;
+}
+
+div[class*="stExpander"] > button {
+    background: #161B22 !important;
+}
+
+div[class*="stExpander"] > button:hover {
+    background: #131720 !important;
 }
 
 /* Subtle label */
 .field-hint {
-    font-size: 11px;
-    color: #8B949E;
-    margin-top: -8px;
-    margin-bottom: 8px;
+    font-size: 13px;
+    color: #C3D0E0;
+    margin-top: -6px;
+    margin-bottom: 10px;
+    line-height: 1.45;
 }
 
 /* Progress bar */
 .stProgress > div > div {
     background: #4F8EF7 !important;
     border-radius: 4px !important;
+}
+
+/* ── Download success banner ── */
+.download-banner {
+    background: #0D2818;
+    border: 1px solid #238636;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 1rem;
+}
+.download-banner .db-icon { font-size: 22px; }
+.download-banner .db-text { flex: 1; }
+.download-banner .db-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #3FB950;
+}
+.download-banner .db-sub {
+    font-size: 12px;
+    color: #8B949E;
+    margin-top: 2px;
+}
+
+/* ── Download button override ── */
+[data-testid="stDownloadButton"] > button {
+    background: #238636 !important;
+    border: 1px solid #2EA043 !important;
+    color: #000 !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    width: 100% !important;
+    padding: .6rem 1rem !important;
+    font-size: 14px !important;
+    transition: all .15s !important;
+}
+[data-testid="stDownloadButton"] > button:hover {
+    background: #2EA043 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px #23863644 !important;
+}
+
+/* ── Spinner text ── */
+.stSpinner > div {
+    border-color: #4F8EF7 !important;
 }
 
 </style>
@@ -317,53 +441,177 @@ Artículo 8. Los casos no previstos en el presente reglamento serán resueltos p
 Artículo 9. El presente reglamento entrará en vigor al momento de su publicación y difusión oficial por parte de las autoridades del Instituto.
 """
 
-PROMPT_TEMPLATE = """Eres un experto en diseño curricular para educación tecnológica superior.
+PROMPT_TEMPLATE = """You are an expert academic content generator specialized in higher technical education.
 
-Genera el contenido académico completo para la siguiente práctica de laboratorio del TESJo.
+Your task is to produce a single valid JSON object describing one laboratory practice for a higher education engineering or technology course.
 
-DATOS DE LA PRÁCTICA:
-- Nombre: {nombre}
-- Número: {numero}
-- Asignatura: {asignatura}
+INPUT DATA:
+  Name:    {nombre}
+  Number:  {numero}
+  Subject: {asignatura}
 
-Devuelve EXCLUSIVAMENTE un objeto JSON válido con esta estructura exacta (sin texto adicional, sin bloques de código markdown):
+OUTPUT REQUIREMENTS:
+- Return ONLY one valid JSON object.
+- No markdown, no code fences, no comments, no extra text.
+- Use strict JSON syntax: double quotes only, no trailing commas, no unquoted keys.
+- Do not include any keys beyond the required fields.
+- Perform a SELF-VALIDATION step before returning. Ensure the JSON is parseable and contains all required keys.
+- Write in formal academic English with technical precision and detail.
+- Respond always in Spanish.
 
+IEEE CITATION REQUIREMENTS:
+- All references must follow IEEE citation style.
+- References must be real academic sources, ideally from 2018-2024.
+- Provide at least 10 unique IEEE references.
+- Cite references inside the theoretical_framework using bracket notation: [1], [2], [3], etc.
+
+CONTENT DEPTH REQUIREMENTS:
+- theoretical_framework must contain a minimum of 10 well-structured paragraphs.
+- Include historical context, core theoretical principles, formal definitions, mathematical or algorithmic foundations, standards or protocols, recent research findings, and real-world applications.
+- Provide at least 20 higher-order questions in the questionnaire.
+- Each questionnaire entry must include both the question and its answer in a single string, clearly separated.
+- Do not use the format "pregunta 1: respuesta" or "pregunta2, respuesta".
+- Instead use the format:
+  pregunta
+  respuesta
+- Use a formal academic tone throughout.
+
+JSON STRUCTURE (STRICT — return ONLY this object):
 {{
-  "nombre": "{nombre}",
-  "numero": "{numero}",
-  "competencia": "<Redacta la competencia específica de esta práctica. 2-3 oraciones. Incluye verbos de desempeño, condición y criterio de calidad.>",
-  "material": [
-    "<Elemento de material/software/recurso 1>",
-    "<Elemento de material/software/recurso 2>",
-    "<Elemento de material/software/recurso 3>"
+  "name": "{nombre}",
+  "number": "{numero}",
+  "competency": "<Detailed competency statement (2-4 sentences). Include measurable performance verbs, operating conditions, and evaluation criteria aligned with Bloom's taxonomy.>",
+  "materials": [
+    "<Hardware / software / resource 1>",
+    "<Hardware / software / resource 2>",
+    "<Hardware / software / resource 3>"
   ],
-  "marco_teorico": "<Marco teórico completo de la práctica. Mínimo 4 párrafos bien desarrollados. Incluye conceptos fundamentales, historia, fundamentos técnicos y aplicación en el contexto de la asignatura.>",
-  "cuestionario": [
-    "<Pregunta de reflexión o evaluación 1>",
-    "<Pregunta de reflexión o evaluación 2>",
-    "<Pregunta de reflexión o evaluación 3>",
-    "<Pregunta de reflexión o evaluación 4>",
-    "<Pregunta de reflexión o evaluación 5>"
+  "theoretical_framework": "<EXTENSIVE theoretical framework — minimum 6 to 10 well-structured paragraphs. Cover historical context, core theoretical principles, mathematical or algorithmic foundations where applicable, key standards or protocols, state-of-the-art research findings with IEEE-style citations such as [1] and [2], and real-world engineering applications. Use precise academic English throughout.>",
+  "questionnaire": [
+    "<Higher-order critical thinking question 1 — analysis or evaluation level>",
+    "<Higher-order critical thinking question 2 — synthesis or design level>",
+    "<Higher-order critical thinking question 3 — application level>",
+    "<Higher-order critical thinking question 4 — comparison or contrast level>",
+    "<Higher-order critical thinking question 5 — reflection or future-work level>"
   ],
-  "aplicaciones": [
-    "<Aplicación práctica o caso de uso real 1>",
-    "<Aplicación práctica o caso de uso real 2>",
-    "<Aplicación práctica o caso de uso real 3>"
+  "applications": [
+    "<Concrete real-world industry application 1 with brief technical justification>",
+    "<Concrete real-world industry application 2 with brief technical justification>",
+    "<Concrete real-world industry application 3 with brief technical justification>"
   ],
-  "referencias": [
-    "<Referencia bibliográfica en formato APA 1>",
-    "<Referencia bibliográfica en formato APA 2>",
-    "<Referencia bibliográfica en formato APA 3>"
+  "references": [
+    "<Full IEEE-style reference 1 — journal article or conference paper, 2018-2024>",
+    "<Full IEEE-style reference 2 — textbook or standard, authoritative source>",
+    "<Full IEEE-style reference 3 — additional peer-reviewed source>"
   ]
-}}
+}}"""
 
-IMPORTANTE:
-- Responde ÚNICAMENTE con el JSON. Nada más.
-- Usa terminología técnica apropiada para nivel superior tecnológico.
-- El marco_teorico debe ser extenso y bien fundamentado.
-- Las referencias deben ser reales y actuales (2018-2024).
-- Todo el contenido debe estar en español formal académico.
-"""
+# ─────────────────────────────────────────────────────────────
+#  KEY NORMALIZATION
+#  The updated prompt outputs English keys.  TDocGeN's Practica
+#  model expects the original Spanish keys.  This map handles
+#  both formats transparently — legacy Spanish JSON still works.
+# ─────────────────────────────────────────────────────────────
+
+_EN_TO_ES: dict[str, str] = {
+    "name":                  "nombre",
+    "number":                "numero",
+    "competency":            "competencia",
+    "materials":             "material",
+    "theoretical_framework": "marco_teorico",
+    "questionnaire":         "cuestionario",
+    "applications":          "aplicaciones",
+    "references":            "referencias",
+}
+
+def normalize_practice_data(data: dict) -> dict:
+    """
+    Translate English prompt keys → Spanish TDocGeN canonical keys.
+    Keys that are already in Spanish (or unknown) pass through unchanged,
+    so both new (English) and legacy (Spanish) JSON are accepted.
+    """
+    return {_EN_TO_ES.get(k, k): v for k, v in data.items()}
+
+REQUIRED_PRACTICE_FIELDS = [
+    "name",
+    "number",
+    "competency",
+    "materials",
+    "theoretical_framework",
+    "questionnaire",
+    "applications",
+    "references",
+]
+
+REQUIRED_PRACTICE_FIELDS_ES = [
+    _EN_TO_ES[field]
+    for field in REQUIRED_PRACTICE_FIELDS
+]
+
+ALLOWED_PRACTICE_KEYS = set(REQUIRED_PRACTICE_FIELDS_ES)
+
+
+def strip_json_fences(text: str) -> str:
+    """Remove common markdown code fences and backticks from AI output."""
+    text = text.strip()
+    match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    if text.startswith("```") and text.endswith("```"):
+        return text[3:-3].strip()
+    return text
+
+
+def extract_first_json_object(text: str) -> str:
+    """Extract the first balanced JSON object from a larger text block."""
+    start = text.find("{")
+    if start == -1:
+        return text
+    stack = []
+    for idx, char in enumerate(text[start:], start=start):
+        if char == "{":
+            stack.append(char)
+        elif char == "}":
+            stack.pop()
+            if not stack:
+                return text[start:idx + 1].strip()
+    return text
+
+
+def remove_trailing_commas(text: str) -> str:
+    """Strip trailing commas from JSON-like content."""
+    return re.sub(r",\s*(?=[}\]])", "", text)
+
+
+def clean_json_text(raw: str) -> str:
+    """Normalize AI JSON output so it can be parsed by json.loads."""
+    text = raw.strip().replace("\r\n", "\n")
+    text = strip_json_fences(text)
+    text = extract_first_json_object(text)
+    text = remove_trailing_commas(text)
+    return text
+
+
+def validate_practice_payload(data: dict) -> tuple[list[str], list[str]]:
+    """Validate parsed practice JSON against required keys and allowed keys."""
+    missing = []
+    extra = []
+
+    if not isinstance(data, dict):
+        return ["root_object"], []
+
+    for field in REQUIRED_PRACTICE_FIELDS_ES:
+        value = data.get(field)
+        if value in (None, ""):
+            missing.append(field)
+        elif isinstance(value, list) and not value:
+            missing.append(field)
+
+    for key in data.keys():
+        if key not in ALLOWED_PRACTICE_KEYS:
+            extra.append(key)
+
+    return missing, extra
 
 # ─────────────────────────────────────────────────────────────
 #  SESSION STATE INIT
@@ -385,6 +633,8 @@ def init_state():
         # Step 2 — practices
         "practices": [],
         "next_practice_id": 1,
+        # Generated document (persists across reruns so download stays visible)
+        "generated_doc": None,  # {"bytes": bytes, "filename": str, "timestamp": str}
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -433,23 +683,100 @@ def build_prompt(p: dict) -> str:
     )
 
 def parse_practice_json(p: dict):
-    raw = p.get("json_input", "").strip()
-
-    if not raw:
+    raw = p.get("json_input", "")
+    if not raw or not raw.strip():
         return None, "El campo JSON está vacío."
 
-    # limpiar markdown
-    if raw.startswith("```"):
-        raw = raw.replace("```json", "")
-        raw = raw.replace("```", "")
-        raw = raw.strip()
-
+    # Try direct parsing first, then attempt sanitized retry on common AI formatting issues.
+    parse_attempts = []
     try:
         data = json.loads(raw)
-        return data, None
+        parse_attempts.append("direct")
+    except json.JSONDecodeError:
+        clean_text = clean_json_text(raw)
+        if clean_text != raw:
+            try:
+                data = json.loads(clean_text)
+                parse_attempts.append("cleaned")
+            except json.JSONDecodeError as e:
+                return None, f"JSON inválido — verifica la estructura: {e}"
+        else:
+            return None, f"JSON inválido — verifica la estructura y sintaxis."
 
-    except json.JSONDecodeError as e:
-        return None, f"JSON inválido: {e}"
+    data = normalize_practice_data(data)
+    missing, extra = validate_practice_payload(data)
+
+    if missing or extra:
+        messages = []
+        if missing:
+            messages.append(f"Faltan campos obligatorios: {', '.join(missing)}.")
+        if extra:
+            messages.append(f"Se encontraron claves adicionales no permitidas: {', '.join(extra)}.")
+        if "cleaned" in parse_attempts:
+            messages.append("El texto fue limpiado automáticamente para intentar parsear el JSON.")
+        return None, " ".join(messages)
+
+    return data, None
+
+
+def build_context_data() -> dict:
+    ps = st.session_state.get("practices", [])
+    asig = st.session_state.get("asignatura", "")
+    return {
+        "division": st.session_state.get("division", ""),
+        "tipo": st.session_state.get("tipo", ""),
+        "asignatura": asig,
+        "elaboro": st.session_state.get("elaboro", []),
+        "emision": st.session_state.get("emision", ""),
+        "edicion": st.session_state.get("edicion", ""),
+        "vigencia": st.session_state.get("vigencia", ""),
+        "presentacion": st.session_state.get("presentacion", ""),
+        "practicas": [
+            {**{"nombre": p["nombre"], "numero": p["numero"]}, **(p.get("parsed") or {})}
+            for p in ps
+        ],
+    }
+
+
+def _compute_context_hash(data: dict) -> str:
+    """Compute hash of context data for change detection."""
+    json_str = json.dumps(data, sort_keys=True, ensure_ascii=False)
+    return hashlib.md5(json_str.encode()).hexdigest()
+
+def autosave_context(force: bool = False) -> None:
+    """Save current context_data to JSON file on disk. Only writes if content changed (debounced) or force=True."""
+    enabled = st.session_state.get("_autosave_enabled", True)
+    if not enabled and not force:
+        return
+
+    try:
+        from pathlib import Path
+        import tempfile
+
+        data = build_context_data()
+        current_hash = _compute_context_hash(data)
+        last_hash = st.session_state.get("_autosave_hash", None)
+
+        # Skip write if content unchanged (unless forced)
+        if current_hash == last_hash and not force:
+            return
+
+        # Prefer workspace cwd so the user can find the file easily
+        try:
+            base = Path.cwd()
+        except Exception:
+            base = Path(tempfile.gettempdir())
+
+        autosave_file = base / "tdocgen_autosave.json"
+        with open(autosave_file, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+
+        st.session_state["_autosave_file"] = str(autosave_file)
+        st.session_state["_autosave_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        st.session_state["_autosave_hash"] = current_hash
+    except Exception:
+        # Do not break the app for autosave errors; report in session_state
+        st.session_state["_autosave_error"] = traceback.format_exc()
 
 def step1_complete() -> bool:
     required = ["division", "asignatura", "emision", "edicion", "vigencia"]
@@ -501,7 +828,7 @@ def render_step_rail():
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2, _, nav_col = st.columns([1, 1, 4, 2])
+    col1, col2, _ = st.columns([1, 1, 4])
     with col1:
         if st.button(
             "① Datos",
@@ -526,7 +853,7 @@ def render_step_rail():
 def render_header():
     st.markdown("""
     <div style="display:flex; align-items:center; gap:14px; margin-bottom:1.5rem;">
-      <div style="font-size:36px;">📄</div>
+      <div style="font-size:36px;"></div>
       <div>
         <div style="font-size:22px; font-weight:700; color:#E6EDF3; letter-spacing:-.02em;">TDocGeN</div>
         <div style="font-size:13px; color:#8B949E; margin-top:1px;">Generador de Manuales de Prácticas · TESJo</div>
@@ -695,12 +1022,13 @@ def render_practice_card(p: dict, idx: int):
 
     display_title = nombre if nombre.strip() else f"Práctica {numero}"
     parsed_ok = p.get("parsed") is not None
+    status_text = "Contenido cargado" if parsed_ok else "Esperando JSON"
+    status_class = "badge-ok" if parsed_ok else "badge-warn"
 
-    badge_html = f'<span class="badge-ok">✓ JSON cargado</span>' if parsed_ok else f'<span class="badge-warn">⟳ Pendiente</span>'
+    badge_html = f'<span class="{status_class}">{status_text}</span>'
 
     with st.expander(f"{'🟢' if parsed_ok else '🔵'} Práctica {numero} — {display_title}", expanded=p.get("expanded", True)):
-
-        st.markdown(f"{badge_html}", unsafe_allow_html=True)
+        st.markdown(badge_html, unsafe_allow_html=True)
         st.markdown("")
 
         # ── Basic info
@@ -726,24 +1054,18 @@ def render_practice_card(p: dict, idx: int):
 
         # ── Prompt generation
         st.markdown('<div class="section-title">① Generar Prompt para IA</div>', unsafe_allow_html=True)
-        st.markdown('<div class="field-hint">Genera el prompt, cópialo y pégalo en tu IA favorita (ChatGPT, Claude, Gemini…).</div>', unsafe_allow_html=True)
+        st.markdown('<div class="field-hint">Genera el prompt, cópialo y pégalo en tu IA favorita (ChatGPT, Claude, Gemini…). El prompt está en inglés y solicita referencias IEEE 2018–2024.</div>', unsafe_allow_html=True)
 
         gen_col, _ = st.columns([1, 3])
         with gen_col:
-            if st.button("⚡ Generar Prompt", key=f"gen_{pid}", type="primary"):
+            if st.button("Generar Prompt", key=f"gen_{pid}", type="primary"):
                 p["prompt"] = build_prompt(p)
                 st.rerun()
 
         if p.get("prompt"):
             prompt_text = p["prompt"]
-            st.text_area(
-                "Prompt generado",
-                value=prompt_text,
-                height=200,
-                key=f"prompt_area_{pid}",
-                label_visibility="collapsed",
-            )
-            st.markdown('<div class="field-hint">Selecciona todo el texto (Ctrl+A) y cópialo, o usa el botón de copia de tu navegador.</div>', unsafe_allow_html=True)
+            st.code(prompt_text, language='')
+            st.markdown('<div class="field-hint">Pulsa el botón de copia junto al bloque de código para copiar el prompt, o utiliza el menú del navegador si lo prefieres.</div>', unsafe_allow_html=True)
 
         st.markdown("<hr/>", unsafe_allow_html=True)
 
@@ -763,34 +1085,184 @@ def render_practice_card(p: dict, idx: int):
 
         load_col, del_col = st.columns([2, 6])
         with load_col:
-            if st.button("✅ Cargar JSON", key=f"load_{pid}", type="primary"):
+            if st.button("Cargar JSON", key=f"load_{pid}", type="primary"):
                 data, err = parse_practice_json(p)
                 if err:
                     st.error(err)
                 else:
                     p["parsed"] = data
-                    st.success("¡Práctica cargada correctamente!")
+                    st.success("Contenido cargado exitosamente.")
                     st.rerun()
         with del_col:
             if st.button("🗑 Eliminar práctica", key=f"del_{pid}"):
-                remove_practice(pid)
+                st.session_state[f"pending_delete_{pid}"] = True
                 st.rerun()
 
-        # ── Preview parsed content
+            if st.session_state.get(f"pending_delete_{pid}"):
+                st.warning("¿Eliminar práctica? Esta acción es irreversible y eliminará todo el contenido asociado.")
+                c_yes, c_no = st.columns([1, 1])
+                with c_yes:
+                    if st.button("Sí, eliminar práctica", key=f"confirm_del_{pid}"):
+                        remove_practice(pid)
+                        st.session_state.pop(f"pending_delete_{pid}", None)
+                        st.rerun()
+                with c_no:
+                    if st.button("Cancelar", key=f"cancel_del_{pid}"):
+                        st.session_state.pop(f"pending_delete_{pid}", None)
+                        st.rerun()
+
+        # ── Preview and Edit parsed content
         if p.get("parsed"):
-            with st.expander("👁 Vista previa de contenido cargado", expanded=False):
+            with st.expander("✏️ Editar contenido cargado", expanded=True):
                 d = p["parsed"]
-                st.markdown(f"**Competencia:** {d.get('competencia','')}")
-                st.markdown(f"**Marco Teórico:** {d.get('marco_teorico','')[:300]}…")
+
+                # ── Competencia
+                st.markdown("**Competencia**")
+                new_comp = st.text_area(
+                    "Competencia",
+                    value=d.get("competencia", ""),
+                    height=100,
+                    key=f"edit_comp_{pid}",
+                    label_visibility="collapsed"
+                )
+                d["competencia"] = new_comp
+                st.markdown("")
+
+                # ── Marco Teórico
+                st.markdown("**📖 Marco Teórico**")
+                new_marco = st.text_area(
+                    "Marco Teórico",
+                    value=d.get("marco_teorico", ""),
+                    height=150,
+                    key=f"edit_marco_{pid}",
+                    label_visibility="collapsed"
+                )
+                d["marco_teorico"] = new_marco
+                st.markdown("")
+
+                # ── Material (dynamic list)
+                st.markdown("**Material**")
                 mat = d.get("material", [])
-                if mat:
-                    st.markdown("**Material:** " + " · ".join(mat))
+                if not isinstance(mat, list):
+                    mat = [mat]
+                mat_to_remove = None
+                for i, item in enumerate(mat):
+                    cols = st.columns([11, 1])
+                    with cols[0]:
+                        new_item = st.text_input(
+                            f"Material {i+1}",
+                            value=item,
+                            key=f"edit_mat_{pid}_{i}",
+                            label_visibility="collapsed"
+                        )
+                        mat[i] = new_item
+                    with cols[1]:
+                        st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True)
+                        if st.button("✕", key=f"edit_mat_del_{pid}_{i}", help="Eliminar"):
+                            if len(mat) > 1:
+                                mat_to_remove = i
+                        st.markdown("</div>", unsafe_allow_html=True)
+                if mat_to_remove is not None:
+                    mat.pop(mat_to_remove)
+                    st.rerun()
+                if st.button("＋ Agregar material", key=f"edit_mat_add_{pid}"):
+                    mat.append("")
+                    st.rerun()
+                d["material"] = mat
+                st.markdown("")
+
+                # ── Cuestionario (dynamic list)
+                st.markdown("**❓ Cuestionario**")
                 cuest = d.get("cuestionario", [])
-                if cuest:
-                    st.markdown("**Cuestionario:** " + str(len(cuest)) + " preguntas generadas")
+                if not isinstance(cuest, list):
+                    cuest = [cuest]
+                cuest_to_remove = None
+                for i, item in enumerate(cuest):
+                    cols = st.columns([11, 1])
+                    with cols[0]:
+                        new_item = st.text_area(
+                            f"Pregunta {i+1}",
+                            value=item,
+                            key=f"edit_cuest_{pid}_{i}",
+                            height=80,
+                            label_visibility="collapsed"
+                        )
+                        cuest[i] = new_item
+                    with cols[1]:
+                        st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True)
+                        if st.button("✕", key=f"edit_cuest_del_{pid}_{i}", help="Eliminar"):
+                            if len(cuest) > 1:
+                                cuest_to_remove = i
+                        st.markdown("</div>", unsafe_allow_html=True)
+                if cuest_to_remove is not None:
+                    cuest.pop(cuest_to_remove)
+                    st.rerun()
+                if st.button("＋ Agregar pregunta", key=f"edit_cuest_add_{pid}"):
+                    cuest.append("")
+                    st.rerun()
+                d["cuestionario"] = cuest
+                st.markdown("")
+
+                # ── Aplicaciones (dynamic list)
+                st.markdown("**🌐 Aplicaciones**")
+                apps = d.get("aplicaciones", [])
+                if not isinstance(apps, list):
+                    apps = [apps]
+                apps_to_remove = None
+                for i, item in enumerate(apps):
+                    cols = st.columns([11, 1])
+                    with cols[0]:
+                        new_item = st.text_input(
+                            f"Aplicación {i+1}",
+                            value=item,
+                            key=f"edit_apps_{pid}_{i}",
+                            label_visibility="collapsed"
+                        )
+                        apps[i] = new_item
+                    with cols[1]:
+                        st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True)
+                        if st.button("✕", key=f"edit_apps_del_{pid}_{i}", help="Eliminar"):
+                            if len(apps) > 1:
+                                apps_to_remove = i
+                        st.markdown("</div>", unsafe_allow_html=True)
+                if apps_to_remove is not None:
+                    apps.pop(apps_to_remove)
+                    st.rerun()
+                if st.button("＋ Agregar aplicación", key=f"edit_apps_add_{pid}"):
+                    apps.append("")
+                    st.rerun()
+                d["aplicaciones"] = apps
+                st.markdown("")
+
+                # ── Referencias (dynamic list)
+                st.markdown("**📚 Referencias IEEE**")
                 refs = d.get("referencias", [])
-                if refs:
-                    st.markdown("**Referencias:** " + str(len(refs)) + " referencias")
+                if not isinstance(refs, list):
+                    refs = [refs]
+                refs_to_remove = None
+                for i, item in enumerate(refs):
+                    cols = st.columns([11, 1])
+                    with cols[0]:
+                        new_item = st.text_input(
+                            f"Referencia {i+1}",
+                            value=item,
+                            key=f"edit_refs_{pid}_{i}",
+                            label_visibility="collapsed"
+                        )
+                        refs[i] = new_item
+                    with cols[1]:
+                        st.markdown("<div style='padding-top:8px'>", unsafe_allow_html=True)
+                        if st.button("✕", key=f"edit_refs_del_{pid}_{i}", help="Eliminar"):
+                            if len(refs) > 1:
+                                refs_to_remove = i
+                        st.markdown("</div>", unsafe_allow_html=True)
+                if refs_to_remove is not None:
+                    refs.pop(refs_to_remove)
+                    st.rerun()
+                if st.button("＋ Agregar referencia", key=f"edit_refs_add_{pid}"):
+                    refs.append("")
+                    st.rerun()
+                d["referencias"] = refs
 
 
 def render_step2():
@@ -830,7 +1302,7 @@ def render_step2():
         st.markdown('<div class="section-title">Exportar Documento</div>', unsafe_allow_html=True)
 
         if done_p < total_p:
-            st.warning(f"Faltan {total_p - done_p} práctica(s) por cargar JSON. Puedes exportar de todas formas, pero esas prácticas quedarán vacías.")
+            st.warning(f"Faltan {total_p - done_p} práctica(s) por cargar JSON. Puedes exportar de todas formas, pero esas prácticas incompletas no serán incluidas correctamente.")
 
         c1, c2 = st.columns([3, 2])
         with c1:
@@ -846,84 +1318,173 @@ def render_step2():
                 placeholder="ruta/a/plantilla.docx"
             )
 
-        if st.button("Generar Documento Word", type="primary"):
-            # Build Manual and render
-            try:
-                import sys
-                from pathlib import Path
+        gen_btn = st.button(
+            "⚙ Generar Documento Word",
+            type="primary",
+            disabled=st.session_state.get("_generating", False),
+        )
 
-                BASE_DIR = Path.cwd()
+        if gen_btn:
+            st.session_state["_generating"] = True
+            st.session_state["generated_doc"] = None  # clear previous
 
-                if str(BASE_DIR) not in sys.path:
-                    sys.path.insert(0, str(BASE_DIR))
+            with st.spinner("Generando documento Word… esto puede tardar unos segundos."):
+                try:
+                    import sys
+                    from pathlib import Path
 
-                from TDocGeN import Manual, Practica, ManualRenderer
+                    BASE_DIR = Path.cwd()
+                    if str(BASE_DIR) not in sys.path:
+                        sys.path.insert(0, str(BASE_DIR))
 
-                manual = Manual(
-                    division=st.session_state["division"],
-                    tipo=st.session_state["tipo"],
-                    asignatura=st.session_state["asignatura"],
-                    elaboro=[x for x in st.session_state["elaboro"] if x.strip()],
-                    emision=st.session_state["emision"],
-                    edicion=st.session_state["edicion"],
-                    vigencia=st.session_state["vigencia"],
-                    presentacion=st.session_state["presentacion"],
-                    reglamento=st.session_state["reglamento"],
-                )
+                    from TDocGeN import Manual, Practica, ManualRenderer
 
-                for p in ps:
-                    data = p.get("parsed") or {}
-                    if data:
-                        practica = Practica.quick(
-                            numero=p.get("numero", ""),
-                            nombre=p.get("nombre", ""),
-                        ).update_from_dict(data)
+                    manual = Manual(
+                        division=st.session_state["division"],
+                        tipo=st.session_state["tipo"],
+                        asignatura=st.session_state["asignatura"],
+                        elaboro=[x for x in st.session_state["elaboro"] if x.strip()],
+                        emision=st.session_state["emision"],
+                        edicion=st.session_state["edicion"],
+                        vigencia=st.session_state["vigencia"],
+                        presentacion=st.session_state["presentacion"],
+                        reglamento=st.session_state["reglamento"],
+                    )
 
-                        manual.agregar_practica(practica)
+                    for p in ps:
+                        data = p.get("parsed") or {}
+                        if data:
+                            practica = (
+                                Practica.quick(
+                                    numero=p.get("numero", ""),
+                                    nombre=p.get("nombre", ""),
+                                ).update_from_dict(data)
+                            )
+                            manual.agregar_practica(practica)
 
-                from pathlib import Path
+                    template_file = Path(template_path)
+                    if not template_file.exists():
+                        st.error(f"Plantilla no encontrada: `{template_path}`. Verifica la ruta.")
+                        st.stop()
 
-                template_file = Path(template_path)
+                    renderer = ManualRenderer(str(template_file))
 
-                if not template_file.exists():
-                    st.error(f"No existe la plantilla: {template_path}")
-                    st.stop()
+                    # ── Render to a temp file, read bytes, then clean up ──
+                    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".docx")
+                    os.close(tmp_fd)
+                    try:
+                        renderer.render(manual, output_path=tmp_path)
+                        with open(tmp_path, "rb") as fh:
+                            doc_bytes = fh.read()
+                    finally:
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
 
-                renderer = ManualRenderer(str(template_file))
-                renderer.render(manual, output_path=output_name)
+                    # ── Build dynamic filename: use user-provided output name when available.
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    asig_slug = "".join(
+                        c if c.isalnum() else "_"
+                        for c in asig.lower()
+                    )[:30].strip("_") or "practicas"
 
-                st.success(f"Documento generado: **{output_name}**")
+                    raw_name = output_name.strip() or f"manual_{asig_slug}_{timestamp}"
+                    # Preservar .docx si está presente en el nombre
+                    has_docx = raw_name.lower().endswith(".docx")
+                    if has_docx:
+                        base_name = raw_name[:-5]  # Remover .docx
+                    else:
+                        base_name = raw_name
+                    # Sanear solo la parte base (sin extensión)
+                    safe_name = "".join(
+                        c if c.isalnum() or c in ("-", "_", ".") else "_"
+                        for c in base_name
+                    ).strip("_")
+                    if not safe_name:
+                        safe_name = f"manual_{asig_slug}_{timestamp}"
+                    safe_name = f"{safe_name}.docx"
 
-            except ImportError as e:
-                st.error(f"No se pudo importar TDocGeN: {e}. Asegúrate de que TDocGeN.py esté en el mismo directorio.")
-            except FileNotFoundError:
-                st.error(f"Plantilla no encontrada: `{template_path}`. Verifica la ruta.")
-            except Exception as e:
-                st.error(f"Error al generar el documento:\n\n{e}")
-                st.code(traceback.format_exc())
+                    download_filename = safe_name
+
+                    # ── Persist so download button survives reruns ──
+                    st.session_state["generated_doc"] = {
+                        "bytes":     doc_bytes,
+                        "filename":  download_filename,
+                        "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                        "practices": done_p,
+                    }
+
+                except ImportError as e:
+                    st.error(
+                        f"No se pudo importar TDocGeN: {e}  \n"
+                        "Asegúrate de que **TDocGeN.py** esté en el mismo directorio."
+                    )
+                except FileNotFoundError:
+                    st.error(f"Plantilla no encontrada: `{template_path}`. Verifica la ruta.")
+                except Exception as e:
+                    st.error(f"Error al generar el documento:")
+                    st.code(traceback.format_exc())
+                finally:
+                    st.session_state["_generating"] = False
+
+        # ── Persistent download area (stays visible across reruns) ──
+        gdoc = st.session_state.get("generated_doc")
+        if gdoc:
+            st.markdown(f"""
+            <div class="download-banner">
+              <div class="db-icon"></div>
+              <div class="db-text">
+                <div class="db-title">Documento generado correctamente</div>
+                <div class="db-sub">{gdoc['filename']} · {gdoc['practices']} práctica(s) incluidas · {gdoc['timestamp']}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown("")
+            st.download_button(
+                label="⬇ Descargar Documento Word (.docx)",
+                data=gdoc["bytes"],
+                file_name=gdoc["filename"],
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+            )
 
         # ── Export context JSON (always available)
-        with st.expander("📋 Exportar contexto JSON (debug / backup)", expanded=False):
-            context_data = {
-                "division": st.session_state["division"],
-                "tipo": st.session_state["tipo"],
-                "asignatura": st.session_state["asignatura"],
-                "elaboro": st.session_state["elaboro"],
-                "emision": st.session_state["emision"],
-                "edicion": st.session_state["edicion"],
-                "vigencia": st.session_state["vigencia"],
-                "presentacion": st.session_state["presentacion"],
-                "practicas": [
-                    {**{"nombre": p["nombre"], "numero": p["numero"]}, **(p.get("parsed") or {})}
-                    for p in ps
-                ]
-            }
+        with st.expander("Exportar contexto JSON (debug / backup)", expanded=False):
+            context_data = build_context_data()
+
+            # Autosave controls
+            c_left, c_right = st.columns([3, 1])
+            with c_left:
+                st.checkbox("Habilitar autosave (guarda automáticamente en el disco del servidor)", value=st.session_state.get("_autosave_enabled", True), key="_autosave_enabled")
+            with c_right:
+                if st.button("Guardar ahora"):
+                    autosave_context(force=True)
+                    st.success("Contexto guardado en disco.")
+
+            autosave_file = st.session_state.get("_autosave_file")
+            autosave_ts = st.session_state.get("_autosave_ts")
+            if autosave_file and autosave_ts:
+                st.markdown(f"Último autosave: {autosave_ts} — {autosave_file}")
+                try:
+                    with open(autosave_file, "r", encoding="utf-8") as fh:
+                        file_text = fh.read()
+                except Exception:
+                    file_text = json.dumps(context_data, ensure_ascii=False, indent=2)
+            else:
+                file_text = json.dumps(context_data, ensure_ascii=False, indent=2)
+
             st.download_button(
                 "⬇ Descargar JSON completo",
-                data=json.dumps(context_data, ensure_ascii=False, indent=2),
+                data=file_text,
                 file_name="tdocgen_context.json",
                 mime="application/json"
             )
+
+            if st.session_state.get("_autosave_error"):
+                st.error("Error autosave: revisa logs del servidor.")
+
+        # Auto-write only when autosave is enabled and content changed (debounced via hash comparison)
+        if st.session_state.get("_autosave_enabled", True):
+            autosave_context()
 
     # ── Back
     st.markdown("<hr/>", unsafe_allow_html=True)

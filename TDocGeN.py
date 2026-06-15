@@ -1,9 +1,12 @@
 
 from dataclasses import dataclass, field
-from typing import List
-from datetime import date
+from typing import List, Optional
 
-from docxtpl import DocxTemplate
+try:
+    from docxtpl import DocxTemplate
+except Exception:
+    DocxTemplate = None
+
 from jinja2 import Environment, StrictUndefined
 
 # helpers
@@ -226,6 +229,12 @@ class ManualRenderer:
 
         self.template_path = template_path
 
+    def _ensure_docxtpl(self):
+        if DocxTemplate is None:
+            raise RuntimeError(
+                "Missing dependency: docxtpl is not installed. Install it with: pip install docxtpl"
+            )
+
     def render(
         self,
         manual: Manual,
@@ -242,27 +251,32 @@ class ManualRenderer:
                 missing
             )
 
-        doc = DocxTemplate(
-            self.template_path
-        )
+        # Ensure dependency available
+        try:
+            self._ensure_docxtpl()
+        except RuntimeError as e:
+            print(f"[ERROR] {e}")
+            raise
 
-        jinja_env = Environment(
-            undefined=StrictUndefined,
-            autoescape=True
-        )
+        try:
+            doc = DocxTemplate(self.template_path)
 
-        doc.render(
-            context,
-            jinja_env=jinja_env
-        )
+            jinja_env = Environment(
+                undefined=StrictUndefined,
+                autoescape=False
+            )
 
-        doc.save(output_path)
+            doc.render(context, jinja_env=jinja_env)
 
-        print(
-            f"[OK] Documento generado: {output_path}"
-        )
+            doc.save(output_path)
 
-        return output_path
+            print(f"[OK] Documento generado: {output_path}")
+
+            return output_path
+
+        except Exception as exc:
+            print(f"[ERROR] Falló la generación del documento: {exc}")
+            raise
 
 # no hay ejemplo, solo se va a usar como libreria
 
