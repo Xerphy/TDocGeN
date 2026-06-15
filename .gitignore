@@ -51,3 +51,5 @@ instance/
 *.pyc
 *~
 *.swp
+
+tdocgen_autosave.json
