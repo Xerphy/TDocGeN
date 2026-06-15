@@ -35,6 +35,23 @@ The script is built around:
 
 ---
 
+## Installation
+
+Clone the repository:
+
+```bash id="w93n2f"
+git clone https://github.com/Xerphy/TDocGeN.git
+cd TDocGeN
+```
+
+Install dependencies:
+
+```bash id="7k2dpl"
+pip install -r requirements.txt
+```
+
+---
+
 ## Example
 
 ```python id="l4i3r8"
@@ -122,6 +139,7 @@ The software is provided "AS IS", without warranty of any kind.
 
 Users are responsible for verifying generated documents before official or institutional use.
 
+
 ---
 
 ## Status
@@ -129,3 +147,12 @@ Users are responsible for verifying generated documents before official or insti
 Under active development.
 
 If the walkers break the pipeline, open an issue.
+
+---
+
+## Support
+
+If you find this project useful, consider leaving a star on the repository.
+
+It helps the project grow and motivates further development.
+
