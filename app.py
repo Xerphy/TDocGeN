@@ -635,6 +635,10 @@ def init_state():
         "next_practice_id": 1,
         # Generated document (persists across reruns so download stays visible)
         "generated_doc": None,  # {"bytes": bytes, "filename": str, "timestamp": str}
+        # Autosave/load state
+        "_autosave_loaded": False,
+        "_autosave_prompted": False,
+        "_autosave_enabled": True,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -731,6 +735,7 @@ def build_context_data() -> dict:
         "edicion": st.session_state.get("edicion", ""),
         "vigencia": st.session_state.get("vigencia", ""),
         "presentacion": st.session_state.get("presentacion", ""),
+        "reglamento": st.session_state.get("reglamento", DEFAULT_REGLAMENTO),
         "practicas": [
             {**{"nombre": p["nombre"], "numero": p["numero"]}, **(p.get("parsed") or {})}
             for p in ps
@@ -739,9 +744,153 @@ def build_context_data() -> dict:
 
 
 def _compute_context_hash(data: dict) -> str:
-    """Compute hash of context data for change detection."""
     json_str = json.dumps(data, sort_keys=True, ensure_ascii=False)
-    return hashlib.md5(json_str.encode()).hexdigest()
+    return hashlib.md5(json_str.encode("utf-8")).hexdigest()
+
+
+def _resolve_autosave_path() -> str | None:
+    try:
+        from pathlib import Path
+        base = Path.cwd()
+    except Exception:
+        from pathlib import Path
+        base = Path(tempfile.gettempdir())
+
+    autosave_file = base / "tdocgen_autosave.json"
+    return str(autosave_file) if autosave_file.exists() else None
+
+
+def _parse_context_json(raw: str | bytes) -> tuple[dict | None, str | None]:
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        cleaned = clean_json_text(raw)
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError as e:
+            return None, f"JSON inválido: {e}"
+
+    if not isinstance(data, dict):
+        return None, "El JSON debe contener un objeto raíz."
+
+    return data, None
+
+
+def load_saved_context(data: dict, source: str | None = None) -> tuple[bool, str | None]:
+    if not isinstance(data, dict):
+        return False, "Contexto inválido."
+
+    st.session_state["division"] = data.get("division", st.session_state.get("division", ""))
+    st.session_state["tipo"] = data.get("tipo", st.session_state.get("tipo", ""))
+    st.session_state["asignatura"] = data.get("asignatura", st.session_state.get("asignatura", ""))
+
+    elaboro = data.get("elaboro", st.session_state.get("elaboro", [""]))
+    if not isinstance(elaboro, list):
+        elaboro = [str(elaboro)] if elaboro is not None else [""]
+    st.session_state["elaboro"] = [str(x) for x in elaboro if str(x).strip()] or [""]
+
+    st.session_state["emision"] = data.get("emision", st.session_state.get("emision", ""))
+    st.session_state["edicion"] = data.get("edicion", st.session_state.get("edicion", ""))
+    st.session_state["vigencia"] = data.get("vigencia", st.session_state.get("vigencia", ""))
+    st.session_state["presentacion"] = data.get("presentacion", st.session_state.get("presentacion", ""))
+    st.session_state["reglamento"] = data.get("reglamento", st.session_state.get("reglamento", DEFAULT_REGLAMENTO))
+
+    raw_practices = data.get("practicas", data.get("practices", [])) or []
+    practices = []
+    next_id = 1
+    for item in raw_practices:
+        if not isinstance(item, dict):
+            continue
+        practice_data = normalize_practice_data(item)
+        practice_json = json.dumps(practice_data, ensure_ascii=False, indent=2)
+        practices.append({
+            "id": next_id,
+            "nombre": practice_data.get("nombre", ""),
+            "numero": str(practice_data.get("numero", "")),
+            "prompt": "",
+            "json_input": practice_json,
+            "parsed": practice_data,
+            "expanded": False,
+        })
+        next_id += 1
+
+    st.session_state["practices"] = practices
+    st.session_state["next_practice_id"] = next_id
+    st.session_state["_autosave_loaded"] = True
+    st.session_state["_autosave_prompted"] = True
+    if source:
+        st.session_state["_autosave_file"] = source
+
+    st.session_state["_autosave_hash"] = _compute_context_hash(build_context_data())
+    return True, None
+
+
+def render_autosave_loader():
+    if st.session_state.get("_autosave_loaded") or st.session_state.get("_autosave_prompted"):
+        return
+
+    if any(
+        st.session_state.get(k, "").strip()
+        for k in ["division", "asignatura", "tipo", "emision", "edicion", "vigencia", "presentacion"]
+    ) or st.session_state.get("practices"):
+        return
+
+    autosave_path = _resolve_autosave_path()
+    if autosave_path is None:
+        return
+
+    st.markdown("""
+    <div class="download-banner">
+      <div class="db-icon">💾</div>
+      <div class="db-text">
+        <div class="db-title">Se encontró un progreso guardado automáticamente</div>
+        <div class="db-sub">Puedes cargar el último autosave o subir un archivo JSON de contexto para continuar desde donde te quedaste.</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        if st.button("Cargar progreso guardado", key="load_autosave_button"):
+            try:
+                from pathlib import Path
+                with open(Path(autosave_path), "r", encoding="utf-8") as fh:
+                    raw = fh.read()
+                data, err = _parse_context_json(raw)
+                if err:
+                    st.error(err)
+                else:
+                    success, load_err = load_saved_context(data, source=autosave_path)
+                    if success:
+                        st.success("Progreso cargado desde autosave.")
+                        st.rerun()
+                    else:
+                        st.error(load_err)
+            except Exception as e:
+                st.error(f"No se pudo cargar el autosave: {e}")
+    with c2:
+        if st.button("Ignorar", key="ignore_autosave_button"):
+            st.session_state["_autosave_prompted"] = True
+            st.rerun()
+
+    st.markdown("<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:13px; color:#C3D0E0; margin-bottom:0.5rem;'>Selecciona un archivo JSON de progreso para cargar un proyecto guardado desde otra ruta.</div>", unsafe_allow_html=True)
+    uploaded = st.file_uploader("Seleccionar archivo JSON de progreso", type=["json"], key="upload_progress_file")
+    if uploaded is not None:
+        raw = uploaded.read()
+        data, err = _parse_context_json(raw)
+        if err:
+            st.error(err)
+        else:
+            success, load_err = load_saved_context(data, source=getattr(uploaded, "name", "subido.json"))
+            if success:
+                st.success("Progreso cargado desde archivo JSON.")
+                st.rerun()
+            else:
+                st.error(load_err)
 
 def autosave_context(force: bool = False) -> None:
     """Save current context_data to JSON file on disk. Only writes if content changed (debounced) or force=True."""
@@ -1497,6 +1646,7 @@ def render_step2():
 # ─────────────────────────────────────────────────────────────
 
 render_header()
+render_autosave_loader()
 render_step_rail()
 st.markdown("")
 
